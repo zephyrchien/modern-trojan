@@ -10,7 +10,7 @@ using ranges::view::take;
 namespace hash {
     // EVP_MD_CTX_new may return NULL if no enough memory.
     Hasher::Hasher(): ctx(EVP_MD_CTX_new()) {
-        assert(EVP_DigestInit_ex(this->ctx, EVP_sha224(), nullptr));
+        EVP_DigestInit_ex(this->ctx, EVP_sha224(), nullptr);
     }
 
     Hasher::~Hasher() {
@@ -34,12 +34,13 @@ namespace hash {
         int length = 0;
         int offset = 0;
 
-        assert(hasher.update(src, len));
-        assert(hasher.finalize(buffer.data(), &length));
-        assert(length == 28);
+        
+        hasher.update(src, len);
+        hasher.finalize(buffer.data(), &length);
+        length == 28;
 
         for (auto b: buffer | take(28)) {
-            fmt::format_to(hex.data()+offset, "{:x}", b);
+            fmt::format_to(hex.data()+offset, "{:02x}", b);
             offset +=2;
         }
         return hex;

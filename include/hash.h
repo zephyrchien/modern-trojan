@@ -19,7 +19,6 @@ namespace hash {
 
         private:
             EVP_MD_CTX *ctx = nullptr; 
-            char buf[EVP_MAX_MD_SIZE];
     };
 
     array<uint8_t, 56> sha224(const uint8_t *src, int len) noexcept;
