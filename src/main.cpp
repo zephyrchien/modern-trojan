@@ -5,11 +5,11 @@ constexpr const char *VERSION = "v0.1.0";
 
 int main(int argc, char **argv)
 {
-    if (argc != 5 ) return -1;
-    
+    if (argc != 6 ) return -1;
+
     asio::io_context ctx;
 
-    auto config = conf::ServerConfig{argv[1], argv[2], argv[3], argv[4]};
+    auto config = conf::ServerConfig{argv[1], argv[2], argv[3], argv[4], argv[5]};
 
     config.show();
 
