@@ -105,9 +105,10 @@ namespace common {
                 co_return EC::Ok;
             },
             [port, endpoint, &resolver](const string& addr) -> awaitable<int> {
-                auto [ec, result] = co_await resolver.async_resolve(addr, use_await);
+                auto [ec, result] = co_await resolver.async_resolve(addr, "", use_await);
                 if (ec) { co_return -EC::ErrResolve; }
                 *endpoint = *result.begin();
+                endpoint->port(port);
                 co_return EC::Ok;
             }
         }, addr.host);
