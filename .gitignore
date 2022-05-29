@@ -2,3 +2,4 @@
 .vscode/
 vcpkg/
 build/
+build-*/
