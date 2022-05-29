@@ -33,7 +33,7 @@ namespace socks5 {
     struct Address {
         using Host = variant<address, string>;
 
-        // Encode socks5 addr to provided buffer, return written buyes.
+        // Encode socks5 addr to provided buffer, return written bytes.
         // It is undefined behavior if dst is not large enough.
         int encode(Slice<uint8_t> dst) const noexcept;
 
@@ -60,7 +60,7 @@ namespace trojan {
     constexpr uint8_t LF = 0x0a;
 
     struct Request {
-        // Encode trojan request to provided buffer, return written buyes.
+        // Encode trojan request to provided buffer, return written bytes.
         // It is undefined behavior if dst is not large enough.
         int encode(Slice<uint8_t> dst) const noexcept;
 
@@ -71,5 +71,18 @@ namespace trojan {
         uint8_t cmd;
         Address addr;
         array<uint8_t, 56> password;
+    };
+
+    struct UdpPacket {
+        // Encode packet header to provided buffer, return written bytes.
+        // It is undefined behavior if dst is not large enough.
+        int encode(Slice<uint8_t> dst) const noexcept;
+
+        // Decode packet header from provided buffer, return parsed bytes.
+        // Parsed data will be stored in "struct UdpPacket".        
+        int decode(Slice<const uint8_t> src) noexcept;
+
+        Address addr;
+        uint16_t length;
     };
 }

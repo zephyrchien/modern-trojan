@@ -6,7 +6,7 @@
 using ec::EC;
 
 namespace socks5 {
-    // Encode socks5 addr to provided buffer, return written buyes.
+    // Encode socks5 addr to provided buffer, return written bytes.
     // It is undefined behavior if dst is not large enough.
     int Address::encode(Slice<uint8_t> dst) const noexcept {
         using helper::overloaded;
@@ -43,8 +43,8 @@ namespace socks5 {
         }, this->host);
 
         // write port
-        dst[0] = uint8_t(port >> 8);
-        dst[1] = uint8_t(port & 0x00ff);
+        dst[0] = uint8_t(this->port >> 8);
+        dst[1] = uint8_t(this->port & 0x00ff);
         dst.advance(2);
         return remaining - dst.size();
     }
@@ -100,7 +100,7 @@ namespace socks5 {
 
 
 namespace trojan {
-    // Encode trojan request to provided buffer, return written buyes.
+    // Encode trojan request to provided buffer, return written bytes.
     // It is undefined behavior if dst is not large enough.
     int Request::encode(Slice<uint8_t> dst) const noexcept {
         int write_n = 0;
@@ -172,6 +172,70 @@ namespace trojan {
             read_n += ret;
         }
         this->addr = std::move(addr);
+
+        // crlf
+        if (src.size() < 2) return -EC::MoreData;
+        if (src[0] != CR || src[1] != LF) [[unlikely]] return -EC::ErrCRLF;
+        src.advance(2);
+        read_n += 2;
+        return read_n;
+    }
+
+    // Encode packet header to provided buffer, return written bytes.
+    // It is undefined behavior if dst is not large enough.
+    int UdpPacket::encode(Slice<uint8_t> dst) const noexcept {
+        int write_n = 0;
+
+        // atyp + addr + port + length + crlf
+        assert(dst.size() >= 1 + 255 + 2 + 2 + 2);
+
+        // encode socks5 addr
+        if (int ret = this->addr.encode(dst); ret < 0) [[unlikely]] {
+            return ret;
+        } else {
+            dst.advance(ret);
+            write_n += ret;
+        }
+
+        // encode length
+        dst[0] = uint8_t(this->length >> 8);
+        dst[1] = uint8_t(this->length & 0x00ff);
+        dst.advance(2);
+        write_n += 2;
+
+        // crlf
+        dst[0] = CR;
+        dst[1] = LF;
+        dst.advance(2);
+        write_n += 2;
+        return write_n;
+    }
+
+    // Decode packet header from provided buffer, return parsed bytes.
+    // Parsed data will be stored in "struct UdpPacket".
+    int UdpPacket::decode(Slice<const uint8_t> src) noexcept {
+        int read_n = 0;
+
+        // atyp + ipv4 + port + length + crlf
+        if (src.size() < (1 + 4 + 2 + 2 + 2)) [[unlikely]] return -EC::MoreData;
+
+        // parse socks5 addr
+        Address addr;
+        if (int ret = addr.decode(src); ret < 0) [[unlikely]] {
+            return ret;
+        } else {
+            src.advance(ret);
+            read_n += ret;
+        }
+        this->addr = std::move(addr);
+
+        // length + crlf
+        if (src.size() < 4) [[unlikely]] return -EC::MoreData;
+
+        // parse length
+        this->length = uint16_t(src[0]) << 8 | src[1];
+        src.advance(2);
+        read_n += 2;
 
         // crlf
         if (src[0] != CR || src[1] != LF) [[unlikely]] return -EC::ErrCRLF;
