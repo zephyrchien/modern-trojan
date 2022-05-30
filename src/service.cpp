@@ -37,8 +37,11 @@ using buffer::Buffer;
 namespace common {
     // Read until "Request" is parsed, return <parsed, read> bytes.
     template<typename _Stream, typename _Request>
-    awaitable<std::pair<int, int>>
-    read_until_parsed(_Stream& stream, Slice<uint8_t> buf, _Request& request) noexcept {
+    awaitable<std::pair<int, int>> read_until_parsed(
+        _Stream& stream,
+        Slice<uint8_t> buf,
+        _Request *request
+    ) noexcept {
         size_t read_n = 0;
         
         while (true) {
@@ -52,13 +55,29 @@ namespace common {
             }
             read_n += n;
 
-            auto decode_n = request.decode(buf.slice_until(read_n));
+            auto decode_n = request->decode(buf.slice_until(read_n));
 
             if (decode_n == -EC::MoreData) [[unlikely]] {
                 continue;
             }
             co_return std::pair{decode_n, read_n};
         }        
+    }
+
+    // Read until buffer is filled.
+    template<typename _Stream>
+    awaitable<int> read_exact(_Stream& stream, Slice<uint8_t> buf) noexcept {
+        while (buf.size() > 0) {
+            auto [ec, n] = co_await stream.async_read_some(
+                asio::buffer(buf.data(), buf.size()),
+                use_await);
+            
+            // read error
+            if (ec || n <= 0) [[unlikely]] { co_return -EC::ErrRead; }
+
+            buf.advance(n);
+        }
+        co_return EC::Ok;
     }
 
     // Write all data to stream.
@@ -94,8 +113,11 @@ namespace common {
 
     // Resolve address to tcp/udp endpoint.
     template<typename _Resolver, typename _Endpoint>
-    awaitable<int>
-    resolve_addr(const socks5::Address& addr, _Resolver& resolver, _Endpoint* endpoint) noexcept {
+    awaitable<int> resolve_addr(
+        _Resolver& resolver,
+        const socks5::Address& addr,
+        _Endpoint *endpoint
+    ) noexcept {
         using socks5::helper::overloaded;
 
         auto port = addr.port;        
@@ -120,15 +142,146 @@ namespace common {
 namespace trojan_server_impl {
     using trojan::Request;
     using service::Server;
+    using common::read_exact;
+    using common::read_until_parsed;
+    using common::write_all;
+    using common::forward;
+    using common::resolve_addr;
 
-    awaitable<void> handle(Server& server, tcp::socket stream) {
+    awaitable<void> handle_udp(
+        Server& server,
+        ssl_socket& ssl_stream,
+        Slice<uint8_t> buf1, Slice<uint8_t> buf2,
+        int offset
+    ) noexcept {
+        udp::socket udp_socket(ssl_stream.get_executor());
+        // first packet
+        {
+            std::error_code ec;
+            trojan::UdpPacket pkt_hdr;
+            udp::endpoint remote_addr;
+            // atyp + addr[0]
+            if (offset < 2) {
+                if (co_await read_exact(ssl_stream, buf1.slice(offset, 2)) < 0) { co_return; }
+            }
+
+            // port + length + crlf
+            auto more_required = 2 + 2 + 2;
+            switch (buf1[0]) {
+                case socks5::ATYP::IPV4: { more_required += 4 - 1; break; }
+                case socks5::ATYP::IPV6: { more_required += 16 - 1; break;}
+                case socks5::ATYP::FQDN: { more_required += buf1[1]; break; }
+                default: { co_return; }
+            }
+
+            // read left bytes of packet header
+            if (offset < more_required + 2) {
+                if (co_await read_exact(ssl_stream, buf1.slice(std::max(offset, 2), more_required)) < 0) {
+                    co_return;
+                }
+            }
+
+            // parse packet header
+            if (pkt_hdr.decode(buf1.slice_until(more_required + 2)) < 0) { co_return; }
+
+            if (pkt_hdr.length > buffer::BUF_SIZE) { co_return; }
+
+            // read payload data
+            if (co_await read_exact(ssl_stream, buf1.slice_until(pkt_hdr.length)) < 0) { co_return; }
+
+            // resolve remote addr
+            if (co_await resolve_addr(server.udp_resolver, pkt_hdr.addr, &remote_addr) < 0){ co_return; }
+
+            // open and bind udp socket
+            udp_socket.open(remote_addr.protocol(), ec);
+            if (ec) { co_return; }
+            udp_socket.bind(udp::endpoint(remote_addr.protocol(), 0), ec);
+            if (ec) { co_return; }
+            udp_socket.set_option(asio::socket_base::reuse_address(true), ec);
+
+            // send udp packet
+            auto [ec2, send_n] = co_await udp_socket.async_send_to(
+                asio::buffer(buf1.data(), pkt_hdr.length),
+                remote_addr, use_await);
+            if (ec2) { co_return; }
+        }
+
+
+        auto udp_to_tcp = [&ssl_stream, &udp_socket, buf2]() -> awaitable<void> {
+            udp::endpoint addr;
+            array<uint8_t, 256> hdr_buf; 
+
+            while (true) {
+                // read from remote
+                auto [ec, recv_n] = co_await udp_socket.async_receive_from(
+                    asio::buffer(buf2.data(), buf2.size()),
+                    addr, use_await);
+                if (ec) { co_return; }
+
+                // BUF_SIZE < u16::MAX
+                trojan::UdpPacket pkt_hdr{addr.address(), uint16_t(recv_n)};
+                size_t hdr_len = pkt_hdr.encode({ hdr_buf.data(), hdr_buf.size() });
+
+                // write udp header
+                if (co_await write_all(ssl_stream, { hdr_buf.data(), hdr_len }) < 0) {
+                    co_return;
+                }
+
+                // write udp payload
+                if (co_await write_all(ssl_stream, buf2.slice_until(recv_n)) < 0) {
+                    co_return;
+                }
+            }
+        };
+
+        auto tcp_to_udp = [&server, &ssl_stream, &udp_socket, buf1, offset]() -> awaitable<void> {
+            udp::endpoint remote_addr;
+            trojan::UdpPacket pkt_hdr;
+            while(true) {
+                // read atyp + addr[0]
+                if (co_await read_exact(ssl_stream, buf1.slice_until(2)) < 0) { co_return; }
+                // port + length + crlf
+                auto more_required = 2 + 2 + 2;
+                switch (buf1[0]) {
+                    case socks5::ATYP::IPV4: { more_required += 4 - 1; break; }
+                    case socks5::ATYP::IPV6: { more_required += 16 - 1; break;}
+                    case socks5::ATYP::FQDN: { more_required += buf1[1]; break; }
+                    default: { co_return; }
+                }
+                // read left bytes of packet header
+                if (co_await read_exact(ssl_stream, buf1.slice(2, more_required)) < 0) {
+                    co_return;
+                }
+                // parse packet header
+                if (pkt_hdr.decode(buf1.slice_until(more_required + 2)) < 0) { co_return; }
+
+                if (pkt_hdr.length > buffer::BUF_SIZE) { co_return; }
+
+                // read payload data
+                if (co_await read_exact(ssl_stream, buf1.slice_until(pkt_hdr.length)) < 0) { co_return; }
+
+                // resolve remote addr
+                if (co_await resolve_addr(server.udp_resolver, pkt_hdr.addr, &remote_addr) < 0){ co_return; }
+
+                // send udp packet
+                auto [ec, send_n] = co_await udp_socket.async_send_to(
+                    asio::buffer(buf1.data(), pkt_hdr.length),
+                    remote_addr, use_await);
+                if (ec) { co_return; }
+            }
+        };
+
+        co_await(tcp_to_udp() || udp_to_tcp());
+    }
+
+    awaitable<void> handle(Server& server, tcp::socket stream) noexcept {
         tcp::socket remote_stream(stream.get_executor());
         std::error_code ec;
         stream.set_option(tcp::no_delay(true), ec);
         remote_stream.set_option(tcp::no_delay(true), ec);
 
         Request request;
-        Buffer<uint8_t> buffer;
+        Buffer<uint8_t> buffer1;
         Buffer<uint8_t> buffer2;
 
         // ssl handshake
@@ -140,8 +293,8 @@ namespace trojan_server_impl {
         }
 
         // trojan request
-        auto [offset_n, offset_m] = co_await common::read_until_parsed(ssl_stream, buffer.slice(), request);
-        if (offset_n < 0) [[unlikely]] {
+        auto [parsed_n, read_n] = co_await read_until_parsed(ssl_stream, buffer1.slice(), &request);
+        if (parsed_n < 0) [[unlikely]] {
             fmt::print("invalid trojan request\n");
             co_return;
         }
@@ -152,9 +305,23 @@ namespace trojan_server_impl {
             co_return;
         }
 
+        // ####################
+        // goto udp
+        if (request.cmd == trojan::CMD::ASSOCIATE) [[unlikely]] {
+            size_t len = read_n - parsed_n;
+            if (len > 0) {
+                std::memcpy(buffer1.data(), buffer1.data() + parsed_n, len);
+            }
+            co_await handle_udp(server, ssl_stream, buffer1.slice(), buffer2.slice(), len);
+            co_return;
+        }
+        // ####################
+
+        // handle tcp
+
         // connect to remote
         tcp::endpoint remote_addr;
-        if (co_await common::resolve_addr(request.addr, server.tcp_resolver, &remote_addr) < 0) {
+        if (co_await resolve_addr(server.tcp_resolver, request.addr, &remote_addr) < 0) [[unlikely]] {
             fmt::print("resolve error\n");
             co_return;
         };
@@ -165,14 +332,14 @@ namespace trojan_server_impl {
         }
 
         // write left (n, m) bytes
-        if (co_await common::write_all(remote_stream, buffer.slice(offset_n, offset_m)) < 0) {
+        if (co_await write_all(remote_stream, buffer1.slice(parsed_n, read_n)) < 0) [[unlikely]] {
             co_return;
         };
 
         // bidi copy
         co_await(
-            common::forward(ssl_stream, remote_stream, buffer.slice()) ||
-            common::forward(remote_stream, ssl_stream, buffer2.slice())
+            forward(ssl_stream, remote_stream, buffer1.slice()) ||
+            forward(remote_stream, ssl_stream, buffer2.slice())
         );
     }
 }
@@ -216,6 +383,12 @@ namespace service {
         ssl_ctx.use_certificate_chain_file(config.crt_path);
         ssl_ctx.use_private_key_file(config.key_path, ssl::context::pem);
         
-        return Server{std::move(listener), std::move(resolver), std::move(ssl_ctx), password};
+        return Server {
+            std::move(listener),
+            std::move(resolver),
+            udp::resolver(ctx),
+            std::move(ssl_ctx),
+            password
+        };
     }
 }

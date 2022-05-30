@@ -8,6 +8,7 @@
 
 using std::array;
 using asio::ip::tcp;
+using asio::ip::udp;
 using asio::awaitable;
 using asio::io_context;
 using conf::ServerConfig;
@@ -16,6 +17,7 @@ namespace service {
     struct Server {
         tcp::acceptor listen;
         tcp::resolver tcp_resolver;
+        udp::resolver udp_resolver;
         asio::ssl::context ssl_ctx;
         array<uint8_t, 56> password;
     };
