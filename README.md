@@ -70,7 +70,7 @@ We can have these things done smoothly with the help of docker containers. See `
 Setup build environment:
 
 ```shell
-docker build . -t buildenv -f static.Dockerfile
+docker build . -t build-static -f static.Dockerfile
 ```
 
 Enter docker container(share this folder):
