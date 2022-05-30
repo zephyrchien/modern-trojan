@@ -5,6 +5,7 @@ namespace ec {
         Ok = 1,
         MoreData = 100,
 
+        ErrCmd,
         ErrAtyp,
         ErrFqdnLen,
         ErrCRLF,

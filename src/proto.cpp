@@ -159,6 +159,7 @@ namespace trojan {
         read_n += 2;
 
         // parse cmd
+        if (src[0] != CMD::CONNECT && src[0] != CMD::ASSOCIATE) [[unlikely]] return -EC::ErrCmd;
         this->cmd = src[0];
         src.advance(1);
         read_n += 1;
