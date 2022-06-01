@@ -197,7 +197,7 @@ namespace trojan_server_impl {
             if (ec) { co_return; }
             udp_socket.bind(udp::endpoint(remote_addr.protocol(), 0), ec);
             if (ec) { co_return; }
-            udp_socket.set_option(asio::socket_base::reuse_address(true), ec);
+            udp_socket.set_option(udp::socket::reuse_address(true), ec);
 
             // send udp packet
             auto [ec2, send_n] = co_await udp_socket.async_send_to(
@@ -375,6 +375,8 @@ namespace service {
         tcp::resolver resolver(ctx);
         tcp::endpoint listen_addr = *resolver.resolve(config.host, config.port);
         tcp::acceptor listener(ctx, listen_addr);
+
+        listener.set_option(tcp::acceptor::reuse_address(true));
 
         auto password = hash::sha224((uint8_t*)config.password.data(), config.password.size());
 
