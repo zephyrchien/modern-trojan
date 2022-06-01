@@ -148,6 +148,7 @@ namespace trojan_server_impl {
     using common::forward;
     using common::resolve_addr;
 
+#if defined(TROJAN_USE_UDP)
     awaitable<void> handle_udp(
         Server& server,
         ssl_socket& ssl_stream,
@@ -273,6 +274,7 @@ namespace trojan_server_impl {
 
         co_await(tcp_to_udp() || udp_to_tcp());
     }
+#endif
 
     awaitable<void> handle(Server& server, tcp::socket stream) noexcept {
         tcp::socket remote_stream(stream.get_executor());
@@ -308,11 +310,13 @@ namespace trojan_server_impl {
         // ####################
         // goto udp
         if (request.cmd == trojan::CMD::ASSOCIATE) [[unlikely]] {
+#if defined(TROJAN_USE_UDP)
             size_t len = read_n - parsed_n;
             if (len > 0) {
                 std::memcpy(buffer1.data(), buffer1.data() + parsed_n, len);
             }
             co_await handle_udp(server, ssl_stream, buffer1.slice(), buffer2.slice(), len);
+#endif
             co_return;
         }
         // ####################

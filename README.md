@@ -36,7 +36,7 @@ Install dependencies with `vcpkg`:
 
 ```shell
 git clone https://github.com/microsoft/vcpkg
-
+vcpkg/bootstrap-vcpkg.sh
 vcpkg/vcpkg integrate install
 vcpkg/vcpkg install asio
 vcpkg/vcpkg install fmt
@@ -48,7 +48,7 @@ Generate makefile and build:
 ```shell
 mkdir build && cd build
 
-cmake -DCMAKE_BUILD_TYPE=Release ..
+cmake ..
 
 make -j
 ```
@@ -59,7 +59,7 @@ Strip symbols:
 strip trojan
 ```
 
-*Note: libgcc/libstdc++ are statically-linked. To have them dynamically-linked you can remove `target_link_options` from `CMakeLists.txt`.
+*Note: libgcc/libstdc++ are statically-linked. To have them dynamically-linked you can add `-DSTATIC_STD=OFF` when generating the makefile.
 
 ## Build-static
 
@@ -84,7 +84,7 @@ Generate makefile and build:
 ```shell
 mkdir build-musl && cd build-musl
 
-cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXE_LINKER_FLAGS=-static ..
+cmake -DSTATIC_BIN ..
 
 make -j
 ```
@@ -101,7 +101,7 @@ Or combine theses commands in one line:
 docker run --rm -it -v "${PWD}":"/trojan" \
     build-static \
     sh -c "cd trojan && mkdir build-musl && cd build-musl
-    && cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXE_LINKER_FLAGS=-static ..
+    && cmake -DSTATIC_BIN ..
     && make -j
     && strip trojan"
 ```

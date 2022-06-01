@@ -5,11 +5,31 @@ set(CMAKE_TOOLCHAIN_FILE ${VCPKG})
 
 project(trojan)
 
+
 set(CMAKE_CXX_STANDARD 20)
-# set(CMAKE_BUILD_TYPE Release)
+
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
 
 file(GLOB_RECURSE CXX_SRC "src/*.cpp")
 add_executable(trojan ${CXX_SRC})
+
+option(UDP "Enable UDP Support" ON)
+option(STATIC_STD "Static Standard Library" ON) 
+option(STATIC_BIN "Static link" OFF)
+
+if(UDP)
+    add_definitions(-DTROJAN_USE_UDP)
+endif()
+
+if(STATIC_STD)
+    target_link_options(trojan PRIVATE -static-libgcc -static-libstdc++)
+endif()
+
+if(STATIC_BIN)
+    set(CMAKE_EXE_LINKER_FLAGS "-static")
+endif()
 
 find_package(asio CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
@@ -26,4 +46,3 @@ target_link_libraries(trojan PRIVATE fmt::fmt-header-only)
 target_link_libraries(trojan PRIVATE range-v3 range-v3-meta range-v3::meta range-v3-concepts)
 target_link_libraries(trojan PRIVATE ${OPENSSL_LIBRARIES})
 target_link_libraries(trojan PRIVATE Threads::Threads)
-target_link_options(trojan PRIVATE -static-libgcc -static-libstdc++)
