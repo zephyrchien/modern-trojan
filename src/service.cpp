@@ -96,6 +96,27 @@ namespace common {
         co_return EC::Ok;
     }
 
+    // Shutdown socket.
+    template<typename Stream>
+    awaitable<void> async_shutdown(Stream& socket) noexcept { co_return; }
+
+    template<>
+    awaitable<void> async_shutdown(tcp::socket& socket) noexcept {
+        std::error_code ec;
+        socket.cancel(ec);
+        socket.shutdown(tcp::socket::shutdown_send, ec);
+        co_return;
+    }
+
+    template<>
+    awaitable<void> async_shutdown(ssl_socket& socket) noexcept {
+        std::error_code ec;
+        co_await socket.async_shutdown(use_await);
+        socket.next_layer().cancel(ec);
+        socket.next_layer().shutdown(tcp::socket::shutdown_send);
+        co_return;
+    }
+
     // Copy from stream1 to stream2.
     template<typename _Stream1, typename _Stream2>
     awaitable<void> forward(_Stream1& a, _Stream2& b, Slice<uint8_t> buf) noexcept {
@@ -105,7 +126,10 @@ namespace common {
                 use_await);
 
             // read err or eof
-            if (ec || n <= 0) [[unlikely]] { co_return; }
+            if (ec || n <= 0) [[unlikely]] {
+                co_await async_shutdown(b);
+                co_return; 
+            }
 
             if (co_await write_all(b, buf.slice_until(n)) < 0) [[unlikely]] { co_return; }
         }
