@@ -95,7 +95,7 @@ Strip symbols:
 strip trojan
 ```
 
-Or combine theses commands in one line:
+Or combine these commands in one line:
 
 ```shell
 docker run --rm -it -v "${PWD}":"/trojan" \

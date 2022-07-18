@@ -16,11 +16,16 @@ file(GLOB_RECURSE CXX_SRC "src/*.cpp")
 add_executable(trojan ${CXX_SRC})
 
 option(UDP "Enable UDP Support" ON)
+option(INTERACTIVE "Run interactive" ON)
 option(STATIC_STD "Static Standard Library" ON) 
 option(STATIC_BIN "Static link" OFF)
 
 if(UDP)
     add_definitions(-DTROJAN_USE_UDP)
+endif()
+
+if(INTERACTIVE)
+    add_definitions(-DTROJAN_RUN_INTERACTIVE)
 endif()
 
 if(STATIC_STD)
