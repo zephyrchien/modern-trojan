@@ -1,12 +1,16 @@
 #pragma once
 
 #include <string>
+#include <fmt/core.h>
 
 using std::string;
 
 namespace conf {
     struct ServerConfig {
-        void show() const noexcept;
+        inline void show() const noexcept {
+            fmt::print("cert={}, key={}, passwd={}\n", this->crt_path, this->key_path, this->password);
+            fmt::print("listen {}:{}..\n", this->host, this->port);
+        };
 
         string host;
         string port;
