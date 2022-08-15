@@ -28,6 +28,14 @@ OPTIONS:
 
 - range-v3
 
+### Options
+
+- TROJAN_USE_UDP (OFF): enable udp support
+- STATIC_STD (ON): static-link libgcc/libstdc++
+- STATIC_BIN (OFF): static-link all libraries if possible
+
+### Steps
+
 Clone this repository:
 
 ```shell
