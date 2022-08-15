@@ -24,10 +24,6 @@ if(UDP)
     add_definitions(-DTROJAN_USE_UDP)
 endif()
 
-if(INTERACTIVE)
-    add_definitions(-DTROJAN_RUN_INTERACTIVE)
-endif()
-
 if(STATIC_STD)
     target_link_options(trojan PRIVATE -static-libgcc -static-libstdc++)
 endif()

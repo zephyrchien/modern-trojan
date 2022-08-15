@@ -2,62 +2,89 @@
 #include "unix_sys.h"
 #include "service.h"
 
-#include <iostream>
+#include <unistd.h>
 
-constexpr const char *VERSION = "v0.1.1";
+using asio::io_context;
+using conf::ServerConfig;
 
-#if defined(TROJAN_RUN_INTERACTIVE)
-void interactive()
+constexpr const char *VERSION = "v0.1.2";
+constexpr const char *CMDUSAGE = R"##(
+trojan -l <addr> -p <port> -k <password> -a <cert> -b <key>
+
+OPTIONS:
+    -d              daemonize
+    -n <nofile>     set nofile limit
+)##";
+
+void init(int argc, char **argv, ServerConfig *config)
 {
-    std::string input;
+    int opt;
+    int required = 5;
 
-    // fd limit
-    unix_sys::show_nofile_limit();
-    fmt::print("would you like to adjust fd limit? [int/0(default)]\n");
-    std::getline(std::cin, input);
-    if (!input.empty()) {
-        if (int limit = std::stoi(input); limit > 0) {
-            unix_sys::set_nofile_limit(limit);
+    int fdlmt = 0;
+    bool daemon = false;
+
+#define STORE(ident) { config->ident = optarg; required--; break;}
+    while((opt = getopt(argc, argv, "vhdn:l:p:k:a:b:")) != -1) {
+        switch(opt) {
+            default:
+                fmt::print("usage: {}", string(CMDUSAGE));
+                std::exit(EXIT_FAILURE);
+            case 'v':
+                fmt::print("trojan {}\n ", string(VERSION));
+                std::exit(EXIT_SUCCESS);
+            case 'h':
+                fmt::print("usage: {}\n", string(CMDUSAGE));
+                std::exit(EXIT_SUCCESS);
+            // syscall
+            case 'd':
+                daemon = true;
+                break;
+            case 'n':
+                fdlmt = std::atoi(optarg);
+                break;
+            // config
+            case 'l':
+                STORE(host);
+            case 'p':
+                STORE(port);
+            case 'k':
+                STORE(password);
+            case 'a':
+                STORE(crt_path);
+            case 'b':
+                STORE(key_path);
         }
-        input.clear();
+    }
+#undef STORE
+
+    if (required > 0) {
+        fmt::print("usage: {}\n", string(CMDUSAGE));
+        std::exit(EXIT_FAILURE);
+    } else {
+        config->show();
     }
 
-    // daemonize
-    fmt::print("would you like to daemonize? [y/n(default)]\n");
-    std::getline(std::cin, input);
-    if (!input.empty() && input[0] == 'y') {
+    if (fdlmt > 0) {
+        unix_sys::set_nofile_limit(fdlmt);
+    }
+    unix_sys::show_nofile_limit();
+
+    if (daemon) {
         unix_sys::daemonize();
-        input.clear();
     }
 }
-#endif
 
 int main(int argc, char **argv)
 {
-    if (argc != 6 ) return -1;
+    io_context ctx;
+    ServerConfig config;
 
-    asio::io_context ctx;
-
-    auto config = conf::ServerConfig{argv[1], argv[2], argv[3], argv[4], argv[5]};
-
-    config.show();
-
-#if defined(TROJAN_RUN_INTERACTIVE)
-    try {
-        interactive();
-#endif
+    init(argc, argv, &config);
 
     auto server = service::build_server(ctx, std::move(config));
-
     asio::co_spawn(ctx, service::run_server(std::move(server)), asio::detached);
-
     ctx.run();
 
-#if defined(TROJAN_RUN_INTERACTIVE)
-    } catch(const std::exception& e) {
-        fmt::print("{}\n", e.what());
-        std::exit(1);
-    }
-#endif
-    std::exit(0);
+    return EXIT_FAILURE;
 }
