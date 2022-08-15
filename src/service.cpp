@@ -40,11 +40,12 @@ namespace common {
     awaitable<std::pair<int, int>> read_until_parsed(
         _Stream& stream,
         Slice<uint8_t> buf,
-        _Request *request
+        _Request *request,
+        int read_times = -1
     ) noexcept {
         size_t read_n = 0;
         
-        while (true) {
+        while (read_times-- != 0) {
             auto [ec, n] = co_await stream.async_read_some(
                 asio::buffer(buf.data() + read_n, buf.size() - read_n),
                 use_await);
@@ -319,7 +320,7 @@ namespace trojan_server_impl {
         }
 
         // trojan request
-        auto [parsed_n, read_n] = co_await read_until_parsed(ssl_stream, buffer1.slice(), &request);
+        auto [parsed_n, read_n] = co_await read_until_parsed(ssl_stream, buffer1.slice(), &request, 1);
         if (parsed_n < 0) [[unlikely]] {
             fmt::print("invalid trojan request\n");
             co_return;
