@@ -88,7 +88,7 @@ docker build . -t build-static -f static.Dockerfile
 Enter docker container(share this folder):
 
 ```shell
-docker run -it -v "${PWD}":"/trojan" /bin/sh
+docker run -it -v "${PWD}":"/trojan" build-static /bin/sh
 ```
 
 Generate makefile and build:
@@ -96,7 +96,7 @@ Generate makefile and build:
 ```shell
 mkdir build-musl && cd build-musl
 
-cmake -DSTATIC_BIN ..
+cmake -DSTATIC_BIN=ON ..
 
 make -j
 ```
@@ -112,8 +112,8 @@ Or combine these commands in one line:
 ```shell
 docker run --rm -it -v "${PWD}":"/trojan" \
     build-static \
-    sh -c "cd trojan && mkdir build-musl && cd build-musl
-    && cmake -DSTATIC_BIN ..
-    && make -j
+    sh -c "cd trojan && mkdir build-musl && cd build-musl \
+    && cmake -DSTATIC_BIN .. \
+    && make -j \
     && strip trojan"
 ```
