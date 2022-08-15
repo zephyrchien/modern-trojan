@@ -411,8 +411,8 @@ namespace service {
 
         ssl::context ssl_ctx{ssl::context::sslv23_server};
         ssl_ctx.set_options(SSL_OPTIONS);
-        ssl_ctx.use_certificate_chain_file(config.crt_path);
-        ssl_ctx.use_private_key_file(config.key_path, ssl::context::pem);
+        ssl_ctx.use_certificate_chain_file(string(config.crt_path));
+        ssl_ctx.use_private_key_file(string(config.key_path), ssl::context::pem);
         
         return Server {
             std::move(listener),

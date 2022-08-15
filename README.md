@@ -5,7 +5,11 @@ Trojan written in modern C++(>=20).
 ## Usage
 
 ```bash
-trojan <addr> <port> <password> <path/to/cert> <path/to/key>
+trojan -l <addr> -p <port> -k <password> -a <cert> -b <key>
+
+OPTIONS:
+    -d              daemonize
+    -n <nofile>     set nofile limit
 ```
 
 ## Build

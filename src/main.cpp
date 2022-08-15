@@ -3,13 +3,15 @@
 #include "service.h"
 
 #include <unistd.h>
+#include <string_view>
 
+using std::string_view;
 using asio::io_context;
 using conf::ServerConfig;
 
-constexpr const char *VERSION = "v0.1.2";
-constexpr const char *CMDUSAGE = R"##(
-trojan -l <addr> -p <port> -k <password> -a <cert> -b <key>
+constexpr string_view VERSION = "v0.1.2";
+constexpr string_view CMDUSAGE = 
+R"##(trojan -l <addr> -p <port> -k <password> -a <cert> -b <key>
 
 OPTIONS:
     -d              daemonize
@@ -28,13 +30,13 @@ void init(int argc, char **argv, ServerConfig *config)
     while((opt = getopt(argc, argv, "vhdn:l:p:k:a:b:")) != -1) {
         switch(opt) {
             default:
-                fmt::print("usage: {}", string(CMDUSAGE));
+                fmt::print("{}", CMDUSAGE);
                 std::exit(EXIT_FAILURE);
             case 'v':
-                fmt::print("trojan {}\n ", string(VERSION));
+                fmt::print("trojan {}\n", VERSION);
                 std::exit(EXIT_SUCCESS);
             case 'h':
-                fmt::print("usage: {}\n", string(CMDUSAGE));
+                fmt::print("{}", CMDUSAGE);
                 std::exit(EXIT_SUCCESS);
             // syscall
             case 'd':
@@ -59,7 +61,7 @@ void init(int argc, char **argv, ServerConfig *config)
 #undef STORE
 
     if (required > 0) {
-        fmt::print("usage: {}\n", string(CMDUSAGE));
+        fmt::print("{}", CMDUSAGE);
         std::exit(EXIT_FAILURE);
     } else {
         config->show();

@@ -1,9 +1,9 @@
 #pragma once
 
-#include <string>
+#include <string_view>
 #include <fmt/core.h>
 
-using std::string;
+using std::string_view;
 
 namespace conf {
     struct ServerConfig {
@@ -12,10 +12,10 @@ namespace conf {
             fmt::print("listen {}:{}..\n", this->host, this->port);
         };
 
-        string host;
-        string port;
-        string password;
-        string crt_path;
-        string key_path;
+        string_view host;
+        string_view port;
+        string_view password;
+        string_view crt_path;
+        string_view key_path;
     };
 }
